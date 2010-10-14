@@ -32,7 +32,22 @@ int main()
 {
 DDRB = 0xFF;  //set port B to all outputs
 while(1){     //do forever
- if(debounce_switch()) {PORTB++;}  //if switch true for 12 passes, increment port B
-  _delay_ms(2);                    //keep in loop to debounce 24ms
-  } //while 
+	if(debounce_switch()) {
+		//Resets PortB if we get to 99
+		if(PORTB==0x99){
+			PORTB=0;
+		}
+		else {
+			if((PORTB&0x0F)==9){
+				//stop incrementing the 4LSBs if we reach 9 and clear them
+				//add 2^4 to portb to increment the 10s place
+				PORTB=PORTB+0x10;
+				PORTB=PORTB&0xF0;
+			}
+			else
+				PORTB++;
+		}
+	}  //if switch true for 12 passes, increment port B
+	_delay_ms(2);                    //keep in loop to debounce 24ms
+} //while
 } //main
