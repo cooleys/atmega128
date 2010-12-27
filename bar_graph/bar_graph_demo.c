@@ -1,10 +1,7 @@
-// bar_graph_demo_skel.c
+// bar_graph_demo.c
 // R. Traylor
 // 10.20.09
 // demos interrups, counter timer and SPI
-
-// !!! YOU MUST RENAME THIS FILE TO MATCH THE MAKEFILE  !!!
-// !!! YOU MUST FILL IN THE AREAS MARKED WITH "@" SIGNS !!!
 
 // This code implements a timer interrupt to update the bar graph display
 // at 0.5 second intervals. Every half second, a new data value to the
@@ -13,10 +10,10 @@
 
 // Expected Connections:
 // Bargraph board       LED board or mega128
-// --------------      ----------------------
-//     reglck          HC138 decoder output Y6
-//     srclk             PORTB bit 1 (sclk)
-//     sdin              PORTB bit 2 (mosi)
+// --------------       --------------------
+//     reglck        HC138 decoder output Y6
+//     srclk            PORTB bit 1 (sclk)
+//     sdin             PORTB bit 2 (mosi)
 //     oe_n                   ground
 //     gnd2                   ground
 //     vdd2                     vcc
@@ -33,9 +30,9 @@
 //interrupts disabled, poll SPIF bit in SPSR to check xmit completion
 /***********************************************************************/
 void spi_init(void){
-  DDRB  |=   @@@@@@@@@@           //Turn on SS, MOSI, SCLK
-  SPCR  |=   @@@@@@@@@@           //set up SPI mode
-  SPSR  |=   @@@@@@@@@@           // double speed operation
+  DDRB   = DDRB | 0x07;           //Turn on SS, MOSI, SCLK
+  SPCR  |= (1<<SPE) | (1<<MSTR);  //set up SPI mode
+  SPSR  |= (1<<SPI2X);            // double speed operation
  }//spi_init
 
 /***********************************************************************/
@@ -45,9 +42,9 @@ void spi_init(void){
 //Interrupt occurs at overflow 0xFF.
 //
 void tcnt0_init(void){
-  ASSR   |=  @@@@@@@@@@  //ext osc TOSC
-  TIMSK  |=  @@@@@@@@@@  //enable timer/counter0 overflow interrupt
-  TCCR0  |=  @@@@@@@@@@  //normal mode, no prescale
+  ASSR  |= (1<<AS0);   //ext osc TOSC
+  TIMSK |= (1<<TOIE0); //enable timer/counter0 overflow interrupt
+  TCCR0 |= (1<<CS00);  //normal mode, no prescale
 }
 
 /*************************************************************************/
@@ -64,14 +61,18 @@ ISR(TIMER0_OVF_vect){
   static uint8_t display_count = 0x01; //holds count for display
 
   count_7ms++;                        //increment count every 7.8125 ms
-  if ((count_7ms % @@@@ ) == 0){      //?? interrupts equals one half second
-    @@@@@@@@@@@                       //send to display
-    @@@@@@@@@@@                       //wait till data is sent out (while spin loop)
+  if ((count_7ms % 64) == 0){         //64 interrupts equals one half second
+    SPDR = display_count;             //send to display
+    while (bit_is_clear(SPSR,SPIF)){} //wait till data is sent out
+/***** warning *****/
+//these two lines are different for me as I don't have a decoder to strobe the HC595
+//use the supplied code in bar_graph_demo_skel.c
     PORTB = 0x60;                     //strobe output data reg in HC595 (falling edge)
     PORTB = 0x00;                     //rising edge
-    display_count = @@@@@@@@@@@;     //shift display bit for next time
+/***** warning *****/
+    display_count = (display_count << 1); //shift for next time
   }
-  if (display_count == @@@@){display_count=@@@@;} //set display back to first positon
+  if (display_count == 0x00){display_count=0x01;} //set display back to first positon
 }
 
 /***********************************************************************/
