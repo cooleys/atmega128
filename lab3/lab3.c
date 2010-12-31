@@ -24,17 +24,18 @@ uint8_t segment_data[5]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t dec_to_7seg[12] = {0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80,
 	0x90, 0xFC, 0xFF};
 
+volatile uint8_t flag = 0;
+volatile uint8_t mode = 1;
+
+volatile uint8_t e1 = 0;
+volatile uint8_t e2 = 0;
 
 void tcnt0_init(void)
 {
 	ASSR   |=  (1<<AS0);    //ext osc TOSC
 	TIMSK  |=  (1<<TOIE0);  //enable timer/counter0 overflow interrupt
 	TCCR0  |=  (0<<WGM01) | (0<<WGM00) | (0<<COM00) | (0<<COM01) | (0<<CS02) |
-				(0<<CS01) | (1<<CS00);
-	//normal mode, no prescale
-
-	//timer counter 0 setup, running off i/o clock
-	//TCCR0 |= (1<<CS02) | (1<<CS00);  //normal mode, prescale by 128
+				(0<<CS01) | (1<<CS00);  //normal mode, no prescale
 }
 
 void spi_init(void)
@@ -53,24 +54,35 @@ void spi_init(void)
 //tcnt0 interrupts come at 7.8125ms internals.
 // 1/32768         = 30.517578uS
 //(1/32768)*256    = 7.8125ms
-//(1/32768)*256*64 = 500mS
 //*****************************************************************************
 
 ISR(TIMER0_OVF_vect){
-  static uint8_t count_7ms = 0;        //holds 7ms tick count in binary
-  static uint8_t display_count = 0x01; //holds count for display
+	static uint8_t i=0;
+	static uint8_t data=0;
+	static uint8_t state=0;
 
-  count_7ms++;                        //increment count every 7.8125 ms
-  if ((count_7ms % 64) == 0){         //64 interrupts equals one half second
-    SPDR = display_count;             //send to display
-    while (bit_is_clear(SPSR,SPIF)){} //wait till data is sent out
+	//Wiggle P0
+	PORTB = 0x01;
+	PORTB = 0x00;
 
-	PORTB = 0x60;                     //strobe output data reg in HC595 (falling edge)
-    PORTB = 0x00;                     //rising edge
+	//make PORTA an input port with pullups
+	DDRA = 0x00;
+	PORTA = 0xFF;
 
-	display_count = (display_count << 1); //shift for next time
-  }
-  if (display_count == 0x00){display_count=0x01;} //set display back to first positon
+	PORTB = 0x70; //enable tristate buffer
+    _delay_us(10);
+	state=chk_buttons(state);
+	PORTB = 0x0F; //disable tristate buffer
+
+	data = SPDR;
+	e1 = data & 0x03;
+	e2 = (data & 0x0C) >> 2;
+	mode ^= state & 0x03;
+
+    SPDR = (data << 4) | mode;
+    while(bit_is_clear(SPSR, SPIF)){}
+
+	flag = 1;
 }
 
 
@@ -141,50 +153,31 @@ uint16_t count=0;
 uint8_t state = 0;
 uint8_t mode = 0;
 
+uint8_t ee1 = 0;
+uint8_t ee2 = 0;
+
 DDRB = 0x77; //set portB as outputs
 
 tcnt0_init();  //initalize counter timer zero
 spi_init();    //initalize SPI port
 sei();
 
-while(1){}
-/*
 while(1){
-	_delay_ms(2); //insert loop delay for debounce
 
-	//make PORTA an input port with pullups
-	DDRA = 0x00;
-	PORTA = 0xFF;
+	if(flag){
+		switch(mode){
+		case 1:
+			;
+			break;
 
-	//enable tristate buffer for pushbutton switches
-	PORTB = 0x70;
-
-	//now check each button and increment the count as needed
-	state=chk_buttons(state);
-
-	for(i=0; i<8; i++){
-		if(state & 1<<i){
-			if(i==1 || i==2){
-				count += (1<<i);
-				//bound the count to 0 - 1023
-				if(count > 1023)
-					count=count-1023;
-			}
-			else if(i==0){
-				if((mode & 0x0f) == 0x00)
-					mode |= 0x0f;
-				else
-					mode &= 0xf0;
-			}
-			else if(i==3){
-				if((mode & 0xf0) == 0x00)
-					mode |= 0xf0;
-				else
-					mode &= 0x0f;
-			}
+		case 2:
+			;
+			break;
 		}
-	}
 
+		ee1 = e1;
+		ee2 = e2;
+	}
 
 	//break up the disp_value to 4, BCD digits in the array: call (segsum)
 	segsum(count);
@@ -202,6 +195,6 @@ while(1){
 		x++;
 		_delay_ms(2);
 	}
-}//while*/
+}//while
 return 0;
 }//main
