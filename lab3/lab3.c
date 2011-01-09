@@ -47,45 +47,6 @@ void spi_init(void)
 	SPSR  |= (1<<SPI2X);            // double speed operation
 }//spi_init
 
-//*****************************************************************************
-//                           timer/counter0 ISR
-//When the TCNT0 overflow interrupt occurs, the count_7ms variable is
-//incremented.  Every 7680 interrupts the minutes counter is incremented.
-//tcnt0 interrupts come at 7.8125ms internals.
-// 1/32768         = 30.517578uS
-//(1/32768)*256    = 7.8125ms
-//*****************************************************************************
-
-ISR(TIMER0_OVF_vect){
-	static uint8_t i=0;
-	static uint8_t data=0;
-	static uint8_t state=0;
-
-	//Wiggle P0
-	PORTB = 0x01;
-	PORTB = 0x00;
-
-	//make PORTA an input port with pullups
-	DDRA = 0x00;
-	PORTA = 0xFF;
-
-	PORTB = 0x70; //enable tristate buffer
-    _delay_us(10);
-	state=chk_buttons(state);
-	PORTB = 0x0F; //disable tristate buffer
-
-	data = SPDR;
-	e1 = data & 0x03;
-	e2 = (data & 0x0C) >> 2;
-	mode ^= state & 0x03;
-
-    SPDR = (data << 4) | mode;
-    while(bit_is_clear(SPSR, SPIF)){}
-
-	flag = 1;
-}
-
-
 //******************************************************************************
 //	                          chk_buttons
 //Checks the state of all of the buttons. It shifts in ones till a button is
@@ -144,6 +105,55 @@ void segsum(uint16_t sum) {
 }//segment_sum
 //******************************************************************************
 
+//send 'value' to the bargraph display
+void setBar(uint8_t value)
+{
+    SPDR = value;
+    while(bit_is_clear(SPSR, SPIF)){}
+    PORTB = 0x60;
+    PORTB = 0x00;
+}
+
+//*****************************************************************************
+//                           timer/counter0 ISR
+//When the TCNT0 overflow interrupt occurs, the count_7ms variable is
+//incremented.  Every 7680 interrupts the minutes counter is incremented.
+//tcnt0 interrupts come at 7.8125ms internals.
+// 1/32768         = 30.517578uS
+//(1/32768)*256    = 7.8125ms
+//*****************************************************************************
+
+ISR(TIMER0_OVF_vect){
+	static uint8_t i=0;
+	static uint8_t data=0;
+	static uint8_t state=0;
+
+	//Wiggle P0	PORTB |= 0x01;
+	PORTB &= 0xFE;
+
+	//make PORTA an input port with pullups
+	DDRA = 0x00;
+	PORTA = 0xFF;
+
+	PORTB = 0x7F; //enable tristate buffer
+    _delay_us(10);
+	state=chk_buttons(state);
+
+	data = SPDR;
+	e1 = data & 0x03;
+	e2 = (data & 0x0C) >> 2;
+	mode ^= state & 0x03;
+
+	SPDR = mode | (e1 << 3) | (e2 << 6);
+	while(bit_is_clear(SPSR, SPIF)){}
+	PORTB = 0x60;
+	PORTB = 0x00;
+
+	PORTB = 0x0F; //disable tristate buffer
+	DDRA = 0xFF;
+	flag = 1;
+}
+
 
 //******************************************************************************
 uint8_t main()
@@ -152,6 +162,7 @@ uint8_t i=0;
 uint16_t count=0;
 uint8_t state = 0;
 uint8_t mode = 0;
+uint8_t turned = 0;
 
 uint8_t ee1 = 0;
 uint8_t ee2 = 0;
@@ -163,24 +174,47 @@ spi_init();    //initalize SPI port
 sei();
 
 while(1){
-
 	if(flag){
-		switch(mode){
-		case 1:
-			;
-			break;
+		if(ee1-e1 > 0 || ee2-e2 > 0){
+			switch(mode){
+				case 0: //encoders increment by 1
+					count += 1;
+					break;
+				case 1: //encoders increment by 2
+					count += 2;
+					break;
 
-		case 2:
-			;
-			break;
+				case 2://encoders increment by 4
+					count += 4;
+					break;
+			}
+
+			//break up the disp_value to 4, BCD digits in the array: call (segsum)
+			segsum(count);
+		}
+
+		if(ee1-e1 > 0 || ee2-e2 > 0){
+			switch(mode){
+				case 0: //encoders increment by 1
+					count -= 1;
+					break;
+				case 1: //encoders increment by 2
+					count -= 2;
+					break;
+
+				case 2://encoders increment by 4
+					count -= 4;
+					break;
+			}
+
+			//break up the disp_value to 4, BCD digits in the array: call (segsum)
+			segsum(count);
 		}
 
 		ee1 = e1;
 		ee2 = e2;
+		flag =0;
 	}
-
-	//break up the disp_value to 4, BCD digits in the array: call (segsum)
-	segsum(count);
 
 	//make PORTA an output
 	DDRA = 0xFF;
