@@ -25,7 +25,7 @@ uint8_t dec_to_7seg[12] = {0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80,
 	0x90, 0xFC, 0xFF};
 
 volatile uint8_t flag = 0;
-volatile uint8_t mode = 1;
+volatile uint8_t mode = 0;
 
 volatile uint8_t e1 = 0;
 volatile uint8_t e2 = 0;
@@ -136,7 +136,6 @@ ISR(TIMER0_OVF_vect){
 	PORTA = 0xFF;
 
 	PORTB = 0x7F; //enable tristate buffer
-    _delay_us(10);
 	state=chk_buttons(state);
 
 	data = SPDR;
@@ -161,11 +160,13 @@ uint8_t main()
 uint8_t i=0;
 uint16_t count=0;
 uint8_t state = 0;
-uint8_t mode = 0;
 uint8_t turned = 0;
 
 uint8_t ee1 = 0;
 uint8_t ee2 = 0;
+
+uint8_t left_turn[4] = {3, 1, 0, 2};
+uint8_t right_turn[4] = {3, 2, 0, 1};
 
 DDRB = 0x77; //set portB as outputs
 
@@ -174,8 +175,8 @@ spi_init();    //initalize SPI port
 sei();
 
 while(1){
-	if(flag){
-		if(ee1-e1 > 0 || ee2-e2 > 0){
+	if(flag && (ee1 != e1 || ee2 != e2) ){
+		if((ee1 == 3 && e1 == 2) || (ee2 == 3 && e2 == 2)){
 			switch(mode){
 				case 0: //encoders increment by 1
 					count += 1;
@@ -188,12 +189,11 @@ while(1){
 					count += 4;
 					break;
 			}
-
-			//break up the disp_value to 4, BCD digits in the array: call (segsum)
-			segsum(count);
+			if(count > 1023)
+				count = 0;
 		}
 
-		if(ee1-e1 > 0 || ee2-e2 > 0){
+		if((ee1 == 3 && e1 == 1) || (ee2 == 3 && e2 == 1)){
 			switch(mode){
 				case 0: //encoders increment by 1
 					count -= 1;
@@ -207,8 +207,8 @@ while(1){
 					break;
 			}
 
-			//break up the disp_value to 4, BCD digits in the array: call (segsum)
-			segsum(count);
+			if(count > 1024)
+				count = 1023;
 		}
 
 		ee1 = e1;
@@ -219,6 +219,7 @@ while(1){
 	//make PORTA an output
 	DDRA = 0xFF;
 
+	segsum(count);
 	int x=0;
 	//bound a counter (0-4) to keep track of digit to display
 	for(i=0x00; i<0x50; i += 0x10){
@@ -227,7 +228,7 @@ while(1){
 		PORTB = i;
 		PORTA = dec_to_7seg[segment_data[x]];
 		x++;
-		_delay_ms(2);
+		_delay_ms(1);
 	}
 }//while
 return 0;
