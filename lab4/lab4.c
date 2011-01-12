@@ -1,4 +1,4 @@
-// lab3.c
+// lab4.c
 // Sarah Cooley
 // ECE473 Lab3 - Fall2010
 
