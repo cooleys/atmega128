@@ -1,6 +1,6 @@
 // lab4.c
 // Sarah Cooley
-// ECE473 Lab3 - Fall2010
+// ECE473 Lab4 - Fall2010
 
 //	HARDWARE SETUP:
 //	PORTA is connected to the segments of the LED display. and to the pushbuttons.
